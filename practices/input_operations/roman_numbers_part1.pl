@@ -3,6 +3,10 @@ use strict;
 use warnings;
 use v5.16;
 
+package RomanNumbers;
+use base 'Exporter';
+our @EXPORT = qw(roman_to_int int_to_roman);
+
 my %roman_val= (
     I => 1,   V => 5,   X => 10,  L => 50,
     C => 100, D => 500, M => 1000
@@ -67,5 +71,6 @@ sub main{
     return 0;
 }
 
-main();
+main() unless caller();
+1;
 
