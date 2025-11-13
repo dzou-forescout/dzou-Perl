@@ -12,23 +12,23 @@ use v5.16;
 sub main {
     say ">> Perl version: $^V";
     say ">> Perl calculator.pl";
-    
+
     while (1) {
         print ">> Enter multiple operations, brackets, order of operations: ";
         my $input = <STDIN>;
-        
+
         # Exit on EOF or empty input
         last unless defined $input;
         chomp $input;
         next if $input =~ /^\s*$/;
-        
+
         # Calculate and display result
         my $result = calculate($input);
         if (defined $result) {
             say ">> result: $result";
         }
     }
-    
+
     return 0;
 }
 
@@ -41,22 +41,22 @@ sub main {
 ##########
 sub calculate {
     my ($expression) = @_;
-    
+
     # Validate the expression contains only allowed characters
     if (!is_valid_expression($expression)) {
         say ">> Error: Invalid characters. Use only: numbers, +, -, *, /, (, )";
         return undef;
     }
-    
+
     # Check for balanced parentheses
     if (!has_balanced_parentheses($expression)) {
         say ">> Error: Unbalanced parentheses";
         return undef;
     }
-    
+
     # Evaluate the expression
     my $result = eval_expression($expression);
-    
+
     return $result;
 }
 
@@ -67,14 +67,14 @@ sub calculate {
 ##########
 sub is_valid_expression {
     my ($expression) = @_;
-    
+
     # Remove all whitespace for checking
     my $cleaned = $expression;
     $cleaned =~ s/\s+//g;
-    
+
     # Check if empty after removing whitespace
     return 0 if $cleaned eq '';
-    
+
     # Allow only: digits, decimal points, operators, parentheses, minus sign
     # Pattern: numbers (including decimals and negatives), operators, and parentheses
     return $cleaned =~ /^[\d\.\+\-\*\/\(\)]+$/;
@@ -87,9 +87,9 @@ sub is_valid_expression {
 ##########
 sub has_balanced_parentheses {
     my ($expression) = @_;
-    
+
     my $count = 0;
-    
+
     # Count opening and closing parentheses
     foreach my $char (split //, $expression) {
         if ($char eq '(') {
@@ -101,7 +101,7 @@ sub has_balanced_parentheses {
             return 0 if $count < 0;
         }
     }
-    
+
     # Count should be zero if balanced
     return $count == 0;
 }
@@ -114,13 +114,13 @@ sub has_balanced_parentheses {
 ##########
 sub eval_expression {
     my ($expression) = @_;
-    
+
     # Remove all whitespace for evaluation
     $expression =~ s/\s+//g;
-    
+
     # Use eval to calculate (safe after validation)
     my $result = eval $expression;
-    
+
     # Check for errors
     if ($@) { # NOTE: $@ is a special variable that contains error messages from eval
         # Parse the error message
@@ -135,7 +135,7 @@ sub eval_expression {
         }
         return undef;
     }
-    
+
     return $result;
 }
 

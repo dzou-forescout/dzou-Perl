@@ -55,11 +55,24 @@ sub main{
         chomp $input;
 
         if($input =~ /^\d+$/) {
-            my $roman = int_to_roman($input);
-            say "Roman result: $roman";
+            say "Countdown (Roman):";
+            while($input > 0) {
+                my $roman = int_to_roman($input);
+                say "$roman";
+                sleep 1 if $input > 1;
+                $input--;
+            }
+            say "Countdown (roman) Done";
+
         }elsif($input =~ /^[IVXLCDMivxlcdm]+$/){
             my $number = roman_to_int($input);
-            say "Numeric result: $number";
+            say "Countdown (numeric):";
+            while($number > 0){
+                say "$number";
+                sleep 1 if $number > 1;
+                $number--;
+            }
+            say "Countdown (numeric) Done";
         }else{
             say "Invalid input!"
         }
