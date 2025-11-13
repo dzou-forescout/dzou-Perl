@@ -3,6 +3,9 @@ use strict;
 use warnings;
 use v5.16;
 
+package Calculator;
+use base 'Exporter';
+our @EXPORT = qw(calculate is_valid_expression has_balanced_parentheses eval_expression);
 
 ##########
 ## @brief Main entry point for the calculator program
@@ -139,4 +142,5 @@ sub eval_expression {
     return $result;
 }
 
-main();
+main()  unless caller();
+1;

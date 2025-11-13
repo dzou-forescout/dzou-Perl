@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use v5.16;
 
-
 ##########
 ## @brief Main entry point for the calculator program
 ## Reads user input and performs arithmetic calculations
