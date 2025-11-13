@@ -3,6 +3,9 @@ use strict;
 use warnings;
 use v5.16;
 
+package Calculator;
+use base 'Exporter';
+our @EXPORT = qw(evaluate_infix);
 ##########
 ## @brief Main entry point for the calculator program
 ## Reads user input and performs arithmetic calculations
@@ -22,10 +25,11 @@ sub main {
         next if $input =~ /^\s*$/;
 
         # Calculate and display result
-        my($ok, $result, $error) = evaluate_infix($input);
-        if($ok) {
+        my ($ok, $result, $error) = evaluate_infix($input);
+        if ($ok) {
             say ">> result: $result";
-        } else {
+        }
+        else {
             say ">> Error: $error";
         }
     }
@@ -47,7 +51,7 @@ sub main {
 ##         $result = calculated result (if $ok = 1)
 ##         $error = error message (if $ok = 0)
 ##########
-sub evaluate_infix{
+sub evaluate_infix {
     my ($s) = @_;
 
     # Remove all whitespace for easier parsing
@@ -60,15 +64,15 @@ sub evaluate_infix{
     # Stack for operators
     my @ops;
 
-    my $len  = length($s);
-    my $i    = 0;
+    my $len = length($s);
+    my $i = 0;
 
     # Track what the previous token was for parsing context
     # Possible values: START, NUM, OP, LPAREN, RPAREN
     my $prev = 'START';
 
     # Main parsing loop - process each character
-    while($i < $len){
+    while ($i < $len) {
         my $c = substr($s, $i, 1);
 
         # If current character is a digit or decimal point, read a number
@@ -82,7 +86,7 @@ sub evaluate_infix{
         }
 
         # Handle opening parenthesis
-        if($c eq '('){
+        if ($c eq '(') {
             push @ops, $c;
             $i++;
             $prev = 'LPAREN';
@@ -90,15 +94,15 @@ sub evaluate_infix{
         }
 
         # Handle unary plus or minus (when it appears at start, after operator, or after '(')
-        if(($c eq '+' || $c eq '-') && ($prev eq 'START' || $prev eq 'OP' || $prev eq 'LPAREN')){
+        if (($c eq '+' || $c eq '-') && ($prev eq 'START' || $prev eq 'OP' || $prev eq 'LPAREN')) {
             # Unary plus - just skip it
-            if($c eq '+'){
+            if ($c eq '+') {
                 $i++;
                 next;
             }
 
             # Unary minus - handle negative numbers
-            if($i + 1 < $len && substr($s, $i + 1, 1) =~ /[\d\.]/){
+            if ($i + 1 < $len && substr($s, $i + 1, 1) =~ /[\d\.]/) {
                 # Next character is a digit, read the number and negate it
                 my ($number, $j, $err) = _read_number($s, $i + 1, $len);
                 return (0, undef, $err) unless defined $number;
@@ -106,26 +110,28 @@ sub evaluate_infix{
                 $i = $j;
                 $prev = 'NUM';
                 next;
-            } elsif($i + 1 < $len && substr($s, $i + 1, 1) eq '('){
+            }
+            elsif ($i + 1 < $len && substr($s, $i + 1, 1) eq '(') {
                 # Unary minus before parenthesis: treat as (0 - expr)
                 push @numbers, -0.0;
                 push @ops, '-';
                 $i++;
                 $prev = 'OP';
                 next;
-            } else {
+            }
+            else {
                 return (0, undef, "dangling unary '-' at pos $i");
             }
         }
 
         # Handle closing parenthesis
-        if($c eq ')'){
+        if ($c eq ')') {
             # Check if we have a matching opening parenthesis
-            if(!(@ops)){ return (0, undef, "mismatched ')' at pos $i") }
+            if (!(@ops)) {return (0, undef, "mismatched ')' at pos $i")}
 
             # Apply all operators until we find the matching '('
-            while(@ops && $ops[-1] ne '('){
-                my($ok, $error) = _apply_top(\@numbers, \@ops);
+            while (@ops && $ops[-1] ne '(') {
+                my ($ok, $error) = _apply_top(\@numbers, \@ops);
                 return (0, undef, $error) unless $ok;
             }
 
@@ -140,14 +146,14 @@ sub evaluate_infix{
         }
 
         # Handle binary operators (+, -, *, /)
-        if(_is_op($c)){
+        if (_is_op($c)) {
             # Operator must follow a number or closing parenthesis
             return (0, undef, "operator '$c' cannot follow $prev at pos $i")
                 unless ($prev eq 'NUM' || $prev eq 'RPAREN');
 
             # Apply operators with higher or equal precedence
-            while(@ops && $ops[-1] ne '(' && _prec($ops[-1]) >= _prec($c)){
-                my($ok, $error) = _apply_top(\@numbers, \@ops);
+            while (@ops && $ops[-1] ne '(' && _prec($ops[-1]) >= _prec($c)) {
+                my ($ok, $error) = _apply_top(\@numbers, \@ops);
                 return (0, undef, $error) unless $ok;
             }
 
@@ -181,7 +187,7 @@ sub evaluate_infix{
 ## @param $_[0] Character to check
 ## @return 1 if character is +, -, *, or /, 0 otherwise
 ##########
-sub _is_op { $_[0] eq '+' || $_[0] eq '-' || $_[0] eq '*' || $_[0] eq '/' }
+sub _is_op {$_[0] eq '+' || $_[0] eq '-' || $_[0] eq '*' || $_[0] eq '/'}
 
 ##########
 ## @brief Returns operator precedence for ordering operations
@@ -189,7 +195,7 @@ sub _is_op { $_[0] eq '+' || $_[0] eq '-' || $_[0] eq '*' || $_[0] eq '/' }
 ## @param $_[0] Operator character (+, -, *, /)
 ## @return 1 for addition/subtraction, 2 for multiplication/division
 ##########
-sub _prec  { ($_[0] eq '+' || $_[0] eq '-') ? 1 : 2 }
+sub _prec {($_[0] eq '+' || $_[0] eq '-') ? 1 : 2}
 
 ##########
 ## @brief Reads a number (integer or decimal) from the expression string
@@ -202,25 +208,27 @@ sub _prec  { ($_[0] eq '+' || $_[0] eq '-') ? 1 : 2 }
 ##         $next_pos = position after the number
 ##         $error = error message (or undef if success)
 ##########
-sub _read_number{
+sub _read_number {
     my ($s, $i, $len) = @_;
     my $j = $i;
-    my $dot = 0;  # Track if we've seen a decimal point
+    my $dot = 0; # Track if we've seen a decimal point
 
     # Read digits and decimal point
     while ($j < $len) {
         my $ch = substr($s, $j, 1);
-        if($ch eq '.'){
+        if ($ch eq '.') {
             # Only one decimal point allowed
-            if($dot){
+            if ($dot) {
                 return (undef, undef, "invalid number format");
             }
             $dot = 1;
             $j++;
-        } elsif ($ch =~ /\d/) {
+        }
+        elsif ($ch =~ /\d/) {
             # Regular digit
             $j++;
-        } else {
+        }
+        else {
             # Not a digit or decimal point, stop reading
             last;
         }
@@ -228,7 +236,7 @@ sub _read_number{
 
     # Extract the number substring and convert to numeric
     my $num = substr($s, $i, $j - $i);
-    return ($num+0, $j, undef);
+    return ($num + 0, $j, undef);
 }
 
 ##########
@@ -241,8 +249,8 @@ sub _read_number{
 ##         $ok = 1 if successful, 0 if error
 ##         $error = error message (or undef if success)
 ##########
-sub _apply_top{
-    my($numbers, $ops) = @_;
+sub _apply_top {
+    my ($numbers, $ops) = @_;
 
     # Need at least two operands
     return (0, "not enough operands") if @$numbers < 2;
@@ -256,19 +264,23 @@ sub _apply_top{
 
     # Perform the operation
     # BUG FIX: Changed = to eq for proper string comparison
-    if($op eq '+'){       # ✅ FIXED: was $op = '+' (assignment)
+    if ($op eq '+') { # ✅ FIXED: was $op = '+' (assignment)
         $curr = $a + $b;
-    } elsif($op eq '-'){
+    }
+    elsif ($op eq '-') {
         $curr = $a - $b;
-    } elsif($op eq '*'){
+    }
+    elsif ($op eq '*') {
         $curr = $a * $b;
-    } elsif($op eq '/'){
+    }
+    elsif ($op eq '/') {
         # Check for division by zero
-        if($b == 0){
+        if ($b == 0) {
             return (0, "division by zero");
         }
         $curr = $a / $b;
-    } else {
+    }
+    else {
         return (0, "unknown operator '$op'");
     }
 
@@ -277,4 +289,5 @@ sub _apply_top{
     return (1, undef);
 }
 
-main();
+main() unless caller();
+1;

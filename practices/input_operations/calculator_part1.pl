@@ -3,6 +3,10 @@ use strict;
 use warnings;
 use v5.16;
 
+package Calculator;
+use base 'Exporter';
+our @EXPORT = qw(calculate);
+
 ##########
 ## @brief Performs arithmetic calculation on input expression
 ## @param $expression String containing the arithmetic expression (e.g., "5 + 2")
@@ -60,4 +64,5 @@ sub main {
     return 0;
 }
 
-main();
+main() unless caller();
+1;
