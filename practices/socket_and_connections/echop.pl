@@ -1,17 +1,30 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
+# echop.pl - SSL Echo Server using IO::Socket::SSL
 
 use strict;
 use warnings;
-use IO::Socket::INET;
-use FindBin;
-use lib $FindBin::Bin;
+use IO::Socket::SSL;
+use FindBin qw($Bin);
+use lib $Bin;
 use Logger;
-use FindBin qw($RealBin);
 
-# Read configuration file
-my $config = read_config('inline.cnfg');
+##############################################
+# Load configuration
+##############################################
+my $config_file = -e 'inline.cnfg' ? 'inline.cnfg' : "$Bin/inline.cnfg";
+my $config      = read_config($config_file);
 
+# Convert relative paths to absolute paths based on script directory
+for my $key (qw(log_dir ssl_cert_file ssl_key_file)) {
+    next unless defined $config->{$key} && length $config->{$key};
+    unless ($config->{$key} =~ m{^/}) {
+        $config->{$key} = "$Bin/$config->{$key}";
+    }
+}
+
+##############################################
 # Initialize logger
+##############################################
 my $logger = Logger->new(
     file     => $config->{log_file},
     dir      => $config->{log_dir},
@@ -19,103 +32,99 @@ my $logger = Logger->new(
     max_size => $config->{max_log_size},
 );
 
-$logger->info('Server', 'Echo server starting...');
+$logger->info('Server', 'Starting SSL echo server...');
 
-# Create server socket
-my $server = IO::Socket::INET->new(
-    LocalPort => $config->{port},
-    Type      => SOCK_STREAM,
-    Reuse     => 1,
-    Listen    => $config->{max_connections},
-) or die "Cannot create server socket: $!\n";
+##############################################
+# Create SSL server socket
+##############################################
+my $server = IO::Socket::SSL->new(
+    LocalPort     => $config->{port},
+    Listen        => $config->{max_connections},
+    Reuse         => 1,
+    Proto         => 'tcp',
 
-$logger->info('Server', "Server listening on port $config->{port}");
-print "Echo server listening on port $config->{port}...\n";
+    SSL_server    => 1,
+    SSL_cert_file => $config->{ssl_cert_file},
+    SSL_key_file  => $config->{ssl_key_file},
+) or die "Failed to create SSL server socket: $IO::Socket::SSL::SSL_ERROR\n";
 
-# Main server loop
+print "SSL Echo Server running on port $config->{port}\n";
+$logger->info('Server', "Listening on port $config->{port}");
+
+##############################################
+# Main accept loop
+##############################################
 while (1) {
-    # Accept new connection
     my $client = $server->accept();
 
     unless ($client) {
-        $logger->error('Server', 'Failed to accept connection');
+        $logger->error('Server', "Accept error: $IO::Socket::SSL::SSL_ERROR");
         next;
     }
 
-    my $client_addr = $client->peerhost();
-    my $client_port = $client->peerport();
-    my $client_ip = "$client_addr:$client_port";
+    my $client_ip =
+        $client->peerhost() . ":" . $client->peerport();
 
-    # Call audit function on new connection
-    $logger->audit($client_ip, 'New connection established');
+    $logger->audit($client_ip, 'New SSL connection established');
     $logger->info('Server', "Client connected from $client_ip");
 
-    # Handle client in subprocess (simple single-threaded version)
     handle_client($client, $client_ip);
 }
 
+##############################################
+# Client handler
+##############################################
 sub handle_client {
     my ($client, $client_ip) = @_;
-
-    $logger->info('Server', "Handling client $client_ip");
 
     while (my $line = <$client>) {
         chomp $line;
 
-        # Parse message
         my ($command, $message) = parse_message($line);
 
         unless ($command) {
-            $logger->warn('Server', "Invalid message format from $client_ip: $line");
-            print $client "ERROR: Invalid message format\n";
+            print $client "ERROR: Invalid command format\n";
+            $logger->warn('Server', "Invalid message from $client_ip: $line");
             next;
         }
 
-        $logger->debug('Server', "Received from $client_ip: $command => $message");
-
-        # Process commands
         if ($command eq 'Say') {
-            # Echo back the message
             my $response = "Reply: $message";
             print $client "$response\n";
             $logger->info('Server', "Echoed to $client_ip: $message");
 
-        } elsif ($command eq 'Reply') {
-            # Client shouldn't send Reply, but handle it gracefully
-            $logger->warn('Server', "Client $client_ip sent Reply command (unexpected)");
-            print $client "ERROR: Reply command not expected from client\n";
-
         } elsif ($command eq 'Close') {
-            # Client wants to close connection
-            $logger->info('Server', "Client $client_ip requested close");
+            $logger->info('Server', "Client requested close: $client_ip");
             print $client "Reply: Goodbye\n";
             last;
 
         } else {
+            print $client "ERROR: Unknown command\n";
             $logger->warn('Server', "Unknown command from $client_ip: $command");
-            print $client "ERROR: Unknown command '$command'\n";
         }
     }
 
     $logger->audit($client_ip, 'Connection closed');
-    $logger->info('Server', "Client $client_ip disconnected");
     close $client;
 }
 
+##############################################
+# Command parsing
+##############################################
 sub parse_message {
     my ($line) = @_;
 
-    # Expected format: <Command> <Message>
-    # Commands: Say, Reply, Close
     if ($line =~ /^(Say|Reply|Close)\s+(.*)$/i) {
-        return (ucfirst(lc($1)), $2);
+        return (ucfirst lc $1, $2);
     } elsif ($line =~ /^(Say|Reply|Close)$/i) {
-        return (ucfirst(lc($1)), '');
+        return (ucfirst lc $1, '');
     }
-
     return (undef, undef);
 }
 
+##############################################
+# Configuration loader
+##############################################
 sub read_config {
     my ($filename) = @_;
 
@@ -123,57 +132,29 @@ sub read_config {
         port            => 6778,
         host            => 'localhost',
         log_file        => 'echo.log',
-        log_dir         => '/tmp',
+        log_dir         => $Bin,
         log_level       => 'INFO',
-        max_log_size    => 1048576,
+        max_log_size    => 1_048_576,
         max_connections => 10,
-        buffer_size     => 1024,
+
+        ssl_cert_file   => 'server.crt',
+        ssl_key_file    => 'server.key',
+        ssl_verify_mode => 'NONE',
     );
 
     return \%config unless -e $filename;
 
-    open my $fh, '<', $filename or die "Cannot open config file '$filename': $!\n";
-
+    open my $fh, '<', $filename or die "Cannot open config: $!\n";
     while (my $line = <$fh>) {
+        next if $line =~ /^\s*#/ || $line =~ /^\s*$/;
         chomp $line;
-        next if $line =~ /^\s*#/;  # Skip comments
-        next if $line =~ /^\s*$/;   # Skip empty lines
-
-        if ($line =~ /^\s*(\w+)\s*=\s*(.+?)\s*$/) {
-            my ($key, $value) = ($1, $2);
-            $config{$key} = $value;
+        if ($line =~ /^(\w+)\s*=\s*(.+)$/) {
+            $config{$1} = $2;
         }
     }
-
     close $fh;
 
     return \%config;
 }
 
-__END__
-
-=head1 NAME
-
-echo-server.pl - Simple echo server with logging
-
-=head1 DESCRIPTION
-
-This server listens on a configurable port (default 6778) and echoes
-back messages from clients. It uses the Logger module for comprehensive
-logging and audit trails.
-
-=head1 COMMANDS
-
-=over 4
-
-=item Say <message>
-
-Echo the message back to the client.
-
-=item Close
-
-Close the connection gracefully.
-
-=back
-
-=cut
+1;

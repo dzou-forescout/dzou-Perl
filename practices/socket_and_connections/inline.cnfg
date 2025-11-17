@@ -7,10 +7,16 @@ host=localhost
 
 # Logger Configuration
 log_file=echo.log
-log_dir=practices/socket_and_connections
+log_dir=.
 log_level=INFO
 max_log_size=1048576
 
 # Server behavior
 max_connections=10
 buffer_size=1024
+
+
+use_ssl=1
+ssl_cert_file=/Users/dzou/IdeaProjects/dzou-Perl/practices/socket_and_connections/server.crt
+ssl_key_file=/Users/dzou/IdeaProjects/dzou-Perl/practices/socket_and_connections/server.key
+ssl_verify_mode=NONE

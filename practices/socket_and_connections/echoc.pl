@@ -1,17 +1,26 @@
-#!/usr/bin/perl
-# echo-client.pl - Echo client using IO::Socket
+#!/usr/bin/env perl
+# echoc.pl - SSL Echo Client using IO::Socket::SSL
 
 use strict;
 use warnings;
-use IO::Socket::INET;
-use FindBin;
-use lib $FindBin::Bin;
+use IO::Socket::SSL qw(SSL_VERIFY_NONE SSL_VERIFY_PEER);
+use FindBin qw($Bin);
+use lib $Bin;
 use Logger;
 
-# Read configuration file
-my $config = read_config('inline.cnfg');
+##############################################
+# Load configuration
+##############################################
+my $config = read_config("$Bin/inline.cnfg");
 
+# Convert relative log_dir to absolute path
+if ($config->{log_dir} !~ m{^/}) {
+    $config->{log_dir} = "$Bin/$config->{log_dir}";
+}
+
+##############################################
 # Initialize logger
+##############################################
 my $logger = Logger->new(
     file     => $config->{log_file},
     dir      => $config->{log_dir},
@@ -19,183 +28,130 @@ my $logger = Logger->new(
     max_size => $config->{max_log_size},
 );
 
-$logger->info('Client', 'Echo client starting...');
+$logger->info('Client', 'Starting SSL echo client...');
 
-# Create client socket
-my $socket = IO::Socket::INET->new(
-    PeerHost => $config->{host},
-    PeerPort => $config->{port},
-    Proto    => 'tcp',
-) or die "Cannot connect to server $config->{host}:$config->{port}: $!\n";
+##############################################
+# SSL verification mode
+##############################################
+my $verify_mode =
+    (!defined $config->{ssl_verify_mode} ||
+        uc($config->{ssl_verify_mode}) eq 'NONE')
+        ? SSL_VERIFY_NONE
+        : SSL_VERIFY_PEER;
 
-$logger->info('Client', "Connected to server $config->{host}:$config->{port}");
-print "Connected to echo server at $config->{host}:$config->{port}\n";
+##############################################
+# Create SSL client socket
+##############################################
+my $socket = IO::Socket::SSL->new(
+    PeerHost        => $config->{host},
+    PeerPort        => $config->{port},
+    Proto           => 'tcp',
+    SSL_verify_mode => $verify_mode,
+) or die "Failed to connect to SSL server: $IO::Socket::SSL::SSL_ERROR\n";
+
+print "Connected to SSL Echo Server at $config->{host}:$config->{port}\n";
 print "Commands: Say <message>, Close\n";
-print "Type 'quit' to exit\n\n";
+print "Type 'quit' to exit.\n\n";
 
-# Main client loop
+##############################################
+# Main loop
+##############################################
 while (1) {
     print "You> ";
     my $input = <STDIN>;
-
-    unless (defined $input) {
-        last;
-    }
-
+    last unless defined $input;
     chomp $input;
 
-    # Handle local quit command
     if ($input =~ /^quit$/i) {
-        $logger->info('Client', 'User initiated quit');
         send_command($socket, 'Close', '');
-        my $response = <$socket>;
-        if ($response) {
-            chomp $response;
-            print "Server> $response\n";
+        if (my $reply = <$socket>) {
+            print "Server> $reply";
         }
         last;
     }
 
-    # Skip empty lines
     next if $input =~ /^\s*$/;
 
-    # Parse and send command
-    my ($command, $message) = parse_input($input);
+    my ($cmd, $msg) = parse_input($input);
 
-    unless ($command) {
-        print "Invalid format. Use: Say <message> or Close\n";
+    unless ($cmd) {
+        print "Invalid input. Use: Say <text> or Close\n";
         next;
     }
 
-    $logger->debug('Client', "Sending command: $command => $message");
+    send_command($socket, $cmd, $msg);
 
-    # Send to server
-    send_command($socket, $command, $message);
-
-    # Get response
     my $response = <$socket>;
-
     unless ($response) {
-        $logger->error('Client', 'No response from server or connection closed');
-        print "Connection closed by server\n";
+        print "Connection closed by server.\n";
         last;
     }
 
-    chomp $response;
-    print "Server> $response\n";
+    print "Server> $response";
 
-    $logger->info('Client', "Received: $response");
-
-    # Exit if we sent Close
-    if ($command eq 'Close') {
-        $logger->info('Client', 'Connection closed by command');
-        last;
-    }
+    last if $cmd eq 'Close';
 }
 
-$logger->info('Client', 'Client shutting down');
 close $socket;
 print "Disconnected.\n";
 
+##############################################
+# Helper: send command to server
+##############################################
 sub send_command {
-    my ($socket, $command, $message) = @_;
-
-    if ($message) {
-        print $socket "$command $message\n";
+    my ($socket, $cmd, $msg) = @_;
+    if (length $msg) {
+        print $socket "$cmd $msg\n";
     } else {
-        print $socket "$command\n";
+        print $socket "$cmd\n";
     }
 }
 
+##############################################
+# Helper: parse user input
+##############################################
 sub parse_input {
     my ($input) = @_;
 
-    # Expected format: <Command> <Message>
-    # Commands: Say, Close
     if ($input =~ /^(Say)\s+(.+)$/i) {
-        return (ucfirst(lc($1)), $2);
-    } elsif ($input =~ /^(Close)$/i) {
-        return (ucfirst(lc($1)), '');
+        return (ucfirst lc $1, $2);
     }
-
-    # Also accept plain text as implicit "Say" command
-    if ($input !~ /^(Say|Close)/i && $input =~ /\S/) {
-        return ('Say', $input);
+    if ($input =~ /^(Close)$/i) {
+        return (ucfirst lc $1, '');
     }
-
-    return (undef, undef);
+    return ('Say', $input);  # Default behavior
 }
 
+##############################################
+# Config loader
+##############################################
 sub read_config {
     my ($filename) = @_;
 
     my %config = (
-        port         => 6778,
-        host         => 'localhost',
-        log_file     => 'echo.log',
-        log_dir      => '/tmp',
-        log_level    => 'INFO',
-        max_log_size => 1048576,
+        port            => 6778,
+        host            => 'localhost',
+        log_file        => 'echo.log',
+        log_dir         => $Bin,
+        log_level       => 'INFO',
+        max_log_size    => 1_048_576,
+
+        ssl_verify_mode => 'NONE',
     );
 
     return \%config unless -e $filename;
 
-    open my $fh, '<', $filename or die "Cannot open config file '$filename': $!\n";
-
+    open my $fh, '<', $filename or die "Cannot open config: $!\n";
     while (my $line = <$fh>) {
+        next if $line =~ /^\s*#/ || $line =~ /^\s*$/;
         chomp $line;
-        next if $line =~ /^\s*#/;  # Skip comments
-        next if $line =~ /^\s*$/;   # Skip empty lines
-
-        if ($line =~ /^\s*(\w+)\s*=\s*(.+?)\s*$/) {
-            my ($key, $value) = ($1, $2);
-            $config{$key} = $value;
+        if ($line =~ /^(\w+)\s*=\s*(.+)$/) {
+            $config{$1} = $2;
         }
     }
-
     close $fh;
 
     return \%config;
 }
 
-__END__
-
-=head1 NAME
-
-echo-client.pl - Simple echo client with logging
-
-=head1 DESCRIPTION
-
-This client connects to the echo server and allows interactive
-communication. It uses the Logger module for comprehensive logging.
-
-=head1 COMMANDS
-
-=over 4
-
-=item Say <message>
-
-Send a message to be echoed back.
-
-=item Close
-
-Close the connection gracefully.
-
-=item quit
-
-Local command to quit the client (sends Close to server).
-
-=back
-
-=head1 USAGE
-
-    perl echo-client.pl
-
-    You> Say Hello World
-    Server> Reply: Hello World
-
-    You> Close
-    Server> Reply: Goodbye
-    Disconnected.
-
-=cut
+1;
