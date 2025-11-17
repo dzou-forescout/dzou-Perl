@@ -1,0 +1,16 @@
+# Echo Server/Client Configuration File
+# Format: key=value (whitespace around = is optional)
+
+# Server Configuration
+port=6778
+host=localhost
+
+# Logger Configuration
+log_file=echo.log
+log_dir=practices/socket_and_connections
+log_level=INFO
+max_log_size=1048576
+
+# Server behavior
+max_connections=10
+buffer_size=1024
